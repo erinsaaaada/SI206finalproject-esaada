@@ -9,26 +9,24 @@ import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials
 from secrets import *
 from requests_oauthlib import OAuth1Session
+from aylienapiclient import textapi
+
 
 spotify_key = secrets.sp_client_key
 spotify_secret = secrets.sp_client_secret
 cc = SpotifyClientCredentials(spotify_key, spotify_secret)
 spotify = spotipy.client.Spotify(client_credentials_manager = cc)
 
-
 ARTIST_CACHE = 'artists.json'
-
-
-
+try:
+    cache_file = open(ARTIST_CACHE, 'r')
+    cache_contents = cache_file.read()
+    #print(cache_contents)
+    CACHE_DICTION = json.loads(cache_contents)
+    cache_file.close()
+except:
+    CACHE_DICTION = {}
 def make_request_using_cache(q):
-    try:
-        cache_file = open(ARTIST_CACHE, 'r')
-        cache_contents = cache_file.read()
-        #print(cache_contents)
-        CACHE_DICTION = json.loads(cache_contents)
-        cache_file.close()
-    except:
-        CACHE_DICTION = {}
     if q in CACHE_DICTION.keys():
         print("Getting cached data...")
         return CACHE_DICTION[q]
@@ -51,10 +49,8 @@ try:
     cache_file.close()
 except:
     CACHE_DICTION = {}
-
 def params_unique_combination1(baseurl, params):
     return baseurl
-
 def make_request_using_cache1(url, params):
     unique_ident = params_unique_combination(url)
 
@@ -79,7 +75,6 @@ auth = tweepy.OAuthHandler(consumer_key, consumer_secret)
 auth.set_access_token(access_token, access_secret)
 api = tweepy.API(auth, parser=tweepy.parsers.JSONParser())
 
-
 TWITTER_CACHE = 'tweet_cache1.json'
 try:
     cache_file = open(TWITTER_CACHE, 'r')
@@ -90,11 +85,10 @@ except:
     CACHE_DICTION = {}
 
 def params_unique_combination2(query, count):
-    return query + count
+    return query
 
 def make_twitter_request_using_cache(query, count):
     unique_ident = params_unique_combination2(query, count)
-
     if unique_ident in CACHE_DICTION:
         print("Getting cached data...")
         return CACHE_DICTION[unique_ident]
@@ -104,6 +98,36 @@ def make_twitter_request_using_cache(query, count):
         CACHE_DICTION[unique_ident] = resp
         dumped_json_cache = json.dumps(CACHE_DICTION)
         fw = open(TWITTER_CACHE,"w")
+        fw.write(dumped_json_cache)
+        fw.close()
+        return CACHE_DICTION[unique_ident]
+
+s_id = secrets.aylien_id
+s_key = secrets.aylien_key
+client = textapi.Client(s_id, s_key)
+
+SENTIMENT_CACHE = 'sentiment_cache.json'
+try:
+    cache_file = open(SENTIMENT_CACHE, 'r')
+    cache_contents = cache_file.read()
+    CACHE_DICTION = json.loads(cache_contents)
+    cache_file.close()
+except:
+    CACHE_DICTION = {}
+def params_unique_combination3(tweet):
+    return tweet
+def make_request_using_cache3(tweet, text):
+    unique_ident = params_unique_combination3(tweet)
+
+    if unique_ident in CACHE_DICTION:
+        print("Getting cached data...")
+        return CACHE_DICTION[unique_ident]
+    else:
+        print("Making a request for new data...")
+        resp = client.Sentiment(text)
+        CACHE_DICTION[unique_ident] = resp
+        dumped_json_cache = json.dumps(CACHE_DICTION)
+        fw = open(SENTIMENT_CACHE,"w")
         fw.write(dumped_json_cache)
         fw.close()
         return CACHE_DICTION[unique_ident]
@@ -137,6 +161,12 @@ class Tweet:
         self.favorite_count = self.tweet_dict["favorite_count"]
         self.id = self.tweet_dict["id"]
         self.popularity_score = self.retweet_count * 2 + self.favorite_count *3
+    def __str__(self):
+        return '''User: {}
+Tweet: {}
+Created Date: {}
+Retweets: {} | Favorites: {}
+Popularity Score: {}'''.format(self.screen_name, self.text, self.createddate, self.retweet_count, self.favorite_count, self.popularity_score)
 
 def artist_request(q):
     r = make_request_using_cache(q)
@@ -203,22 +233,25 @@ def spotify_request(q):
 
 def twitter_request(artist):
     query = artist
-    count = '50'
+    count = '70'
     r = make_twitter_request_using_cache(query, count)
     results = r["statuses"]
     tweets_list = []
     for d in results:
-        tweets_list += [d]
+        if "RT" not in d["text"]:
+            tweets_list += [d]
     inst_list = [Tweet(t) for t in tweets_list]
     sorted_inst_list = sorted(inst_list, key = lambda x: x.popularity_score, reverse = True)
     return sorted_inst_list
 
-print(twitter_request("Elton John"))
-
 def get_lyrics():
     pass
 
-def sentiment():
+def tweet_sentiment(tweet_obj):
+    resp = make_request_using_cache3(tweet_obj.text, {'text':tweet_obj.text})
+    return resp
+
+def lyric_sentiment():
     pass
 
 def init_song_table(artist):
@@ -285,23 +318,29 @@ def init_tweet_table(artist):
             cur.execute(statement)
             statement1 = """CREATE TABLE 'Tweets' (
             'Id' INTEGER PRIMARY KEY AUTOINCREMENT,
-            'Tweet_date' TEXT,
+            'Tweet Date' TEXT,
             'Username' TEXT,
-            'Tweet_text' TEXT,
-            'Retweet_count' INTEGER,
-            'Favorite_count' INTEGER,
-            'Polarity' INTEGER,
+            'Tweet Text' TEXT,
+            'Favorite Count' INTEGER,
+            'Retweets' INTEGER,
+            'Popularity' INTEGER,
+            'Polarity' TEXT,
+            'Subjectivity' TEXT
             );"""
+            cur.execute(statement1)
         else:
             None
     except:
-        statement1 = """CREATE TABLE 'Tweets' (
+        statement1 = """CREATE TABLE "Tweets" (
         'Id' INTEGER PRIMARY KEY AUTOINCREMENT,
-        'Tweet_date' TEXT,
-        'Tweet_text' TEXT,
-        'isRetweet' TEXT,
-        'Favorite_count' INTEGER,
-        'Polarity' INTEGER,
+        'Tweet Date' TEXT,
+        'Username' TEXT,
+        'Tweet Text' TEXT,
+        'Favorite Count' INTEGER,
+        'Retweets', INTEGER,
+        'Popularity' INTEGER,
+        'Polarity' TEXT,
+        'Subjectivity' TEXT
         );"""
         cur.execute(statement1)
     conn.commit()
@@ -326,13 +365,16 @@ def populate_song_table(artist):
 def populate_tweets_table(artist):
     conn = sqlite3.connect('{}.db'.format(artist))
     cur = conn.cursor()
-
     for tweet in twitter_request(artist):
-        insertion = [None, tweet.createddate, tweet.text, tweet., song.album_name, song.popularity, None, song.length]
+        sentiment = tweet_sentiment(tweet)
+        polarity = sentiment['polarity']
+        subjectivity = sentiment['subjectivity']
+        insertion = [None, tweet.createddate, tweet.screen_name, tweet.text, tweet.favorite_count, tweet.retweet_count, tweet.popularity_score, polarity, subjectivity]
         statement = 'INSERT INTO "Tweets" '
-        statement += 'VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+        statement += 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
         cur.execute(statement, insertion)
     conn.commit()
+
 
 def bar_chart():
     pass
