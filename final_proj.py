@@ -6,6 +6,8 @@ import json
 import requests
 import sys
 import spotipy
+import lyricwikia
+import plotly
 from spotipy.oauth2 import SpotifyClientCredentials
 from secrets import *
 from requests_oauthlib import OAuth1Session
@@ -18,15 +20,16 @@ cc = SpotifyClientCredentials(spotify_key, spotify_secret)
 spotify = spotipy.client.Spotify(client_credentials_manager = cc)
 
 ARTIST_CACHE = 'artists.json'
-try:
-    cache_file = open(ARTIST_CACHE, 'r')
-    cache_contents = cache_file.read()
-    #print(cache_contents)
-    CACHE_DICTION = json.loads(cache_contents)
-    cache_file.close()
-except:
-    CACHE_DICTION = {}
+
 def make_request_using_cache(q):
+    try:
+        cache_file = open(ARTIST_CACHE, 'r')
+        cache_contents = cache_file.read()
+        #print(cache_contents)
+        CACHE_DICTION = json.loads(cache_contents)
+        cache_file.close()
+    except:
+        CACHE_DICTION = {}
     if q in CACHE_DICTION.keys():
         print("Getting cached data...")
         return CACHE_DICTION[q]
@@ -40,29 +43,31 @@ def make_request_using_cache(q):
         fw.close()
         return CACHE_DICTION[q]
 
-
 LYRICS_CACHE = 'lyrics.json'
-try:
-    cache_file = open(LYRICS_CACHE, 'r')
-    cache_contents = cache_file.read()
-    CACHE_DICTION = json.loads(cache_contents)
-    cache_file.close()
-except:
-    CACHE_DICTION = {}
-def params_unique_combination1(baseurl, params):
-    return baseurl
-def make_request_using_cache1(url, params):
-    unique_ident = params_unique_combination(url)
 
+def params_unique_combination1(artist, song):
+    return artist + ' ' + song
+def make_request_using_cache1(artist, song):
+    try:
+        cache_file = open(LYRICS_CACHE, 'r')
+        cache_contents = cache_file.read()
+        CACHE_DICTION = json.loads(cache_contents)
+        cache_file.close()
+    except:
+        CACHE_DICTION = {}
+    unique_ident = params_unique_combination1(artist, song)
     if unique_ident in CACHE_DICTION:
         print("Getting cached data...")
         return CACHE_DICTION[unique_ident]
     else:
         print("Making a request for new data...")
-        resp = requests.get(url)
-        CACHE_DICTION[unique_ident] = resp.text
+        try:
+            lyrics = lyricwikia.get_lyrics(artist, song)
+            CACHE_DICTION[unique_ident] = lyrics
+        except:
+            CACHE_DICTION[unique_ident] = 'No lyrics'
         dumped_json_cache = json.dumps(CACHE_DICTION)
-        fw = open(CACHE_FNAME,"w")
+        fw = open(LYRICS_CACHE,"w")
         fw.write(dumped_json_cache)
         fw.close()
         return CACHE_DICTION[unique_ident]
@@ -76,18 +81,17 @@ auth.set_access_token(access_token, access_secret)
 api = tweepy.API(auth, parser=tweepy.parsers.JSONParser())
 
 TWITTER_CACHE = 'tweet_cache1.json'
-try:
-    cache_file = open(TWITTER_CACHE, 'r')
-    cache_contents = cache_file.read()
-    CACHE_DICTION = json.loads(cache_contents)
-    cache_file.close()
-except:
-    CACHE_DICTION = {}
-
 def params_unique_combination2(query, count):
     return query
 
 def make_twitter_request_using_cache(query, count):
+    try:
+        cache_file = open(TWITTER_CACHE, 'r')
+        cache_contents = cache_file.read()
+        CACHE_DICTION = json.loads(cache_contents)
+        cache_file.close()
+    except:
+        CACHE_DICTION = {}
     unique_ident = params_unique_combination2(query, count)
     if unique_ident in CACHE_DICTION:
         print("Getting cached data...")
@@ -107,18 +111,19 @@ s_key = secrets.aylien_key
 client = textapi.Client(s_id, s_key)
 
 SENTIMENT_CACHE = 'sentiment_cache.json'
-try:
-    cache_file = open(SENTIMENT_CACHE, 'r')
-    cache_contents = cache_file.read()
-    CACHE_DICTION = json.loads(cache_contents)
-    cache_file.close()
-except:
-    CACHE_DICTION = {}
+POLARITY_CACHE = 'polarity_cache.json'
+
 def params_unique_combination3(tweet):
     return tweet
 def make_request_using_cache3(tweet, text):
+    try:
+        cache_file = open(SENTIMENT_CACHE, 'r')
+        cache_contents = cache_file.read()
+        CACHE_DICTION = json.loads(cache_contents)
+        cache_file.close()
+    except:
+        CACHE_DICTION = {}
     unique_ident = params_unique_combination3(tweet)
-
     if unique_ident in CACHE_DICTION:
         print("Getting cached data...")
         return CACHE_DICTION[unique_ident]
@@ -131,6 +136,31 @@ def make_request_using_cache3(tweet, text):
         fw.write(dumped_json_cache)
         fw.close()
         return CACHE_DICTION[unique_ident]
+
+def params_unique_combination4(song, artist):
+    return song + ' ' + artist
+def make_request_using_cache4(song, artist, text):
+    try:
+        cache_file = open(POLARITY_CACHE, 'r')
+        cache_contents = cache_file.read()
+        CACHE_DICTION = json.loads(cache_contents)
+        cache_file.close()
+    except:
+        CACHE_DICTION = {}
+    unique_ident = params_unique_combination4(song, artist)
+    if unique_ident in CACHE_DICTION:
+        print("Getting cached data...")
+        return CACHE_DICTION[unique_ident]
+    else:
+        print("Making a request for new data...")
+        resp = client.Sentiment(text)
+        CACHE_DICTION[unique_ident] = resp
+        dumped_json_cache = json.dumps(CACHE_DICTION)
+        fw = open(POLARITY_CACHE,"w")
+        fw.write(dumped_json_cache)
+        fw.close()
+        return CACHE_DICTION[unique_ident]
+
 
 class Song:
     def __init__(self, artist, song, is_single=True, album_name = "Single"):
@@ -207,6 +237,7 @@ def spotify_request(q):
                 sort_songs = sorted(song_list, key = lambda x: x[1])
                 song_names = [song[0] for song in sort_songs]
 
+
     else:
         r = make_request_using_cache(q)
         #print(r)
@@ -244,15 +275,27 @@ def twitter_request(artist):
     sorted_inst_list = sorted(inst_list, key = lambda x: x.popularity_score, reverse = True)
     return sorted_inst_list
 
-def get_lyrics():
-    pass
+def get_lyrics(artist):
+    for s in artist_request(artist):
+        if s['album']['album_type'] == 'single':
+            inst_list += [Song(artist, s)]
+        else:
+            inst_list += [Song(artist, s, False)]
+    for s in inst_list:
+        make_request_using_cache1(s.artist, s.name)
 
 def tweet_sentiment(tweet_obj):
     resp = make_request_using_cache3(tweet_obj.text, {'text':tweet_obj.text})
     return resp
 
-def lyric_sentiment():
-    pass
+def lyric_sentiment(artist, song):
+    resp = make_request_using_cache1(artist, song)
+    if resp == 'No lyrics':
+        return 'N/a'
+    else:
+        lyrics = resp
+        sent = make_request_using_cache4(artist, song, lyrics)
+        return sent
 
 def init_song_table(artist):
     try:
@@ -279,7 +322,8 @@ def init_song_table(artist):
             'Album_name' TEXT,
             'Popularity' INTEGER,
             'Polarity' TEXT,
-            'Length' INTEGER,
+            'Sentiment' TEXT,
+            'Length' INTEGER
             );"""
             cur.execute(statement1)
         else:
@@ -293,6 +337,7 @@ def init_song_table(artist):
         'Album_name' TEXT,
         'Popularity' INTEGER,
         'Polarity' TEXT,
+        'Sentiment' TEXT,
         'Length' INTEGER
         );"""
         cur.execute(statement1)
@@ -356,10 +401,21 @@ def populate_song_table(artist):
         else:
             inst_list += [Song(artist, s, False)]
     for song in inst_list:
-        insertion = [None, song.artist, song.name, song.release_date, song.album_name, song.popularity, None, song.length]
-        statement = 'INSERT INTO "Songs" '
-        statement += 'VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-        cur.execute(statement, insertion)
+        sentiment = lyric_sentiment(song.artist, song.name)
+        if type(sentiment) == dict:
+            subjectivity = sentiment['subjectivity']
+            polarity = sentiment['polarity']
+            insertion = [None, song.artist, song.name, song.release_date, song.album_name, song.popularity, subjectivity, polarity, song.length]
+            statement = 'INSERT INTO "Songs" '
+            statement += 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+            cur.execute(statement, insertion)
+        else:
+            subjectivity = None
+            polarity = None
+            insertion = [None, song.artist, song.name, song.release_date, song.album_name, song.popularity, subjectivity, polarity, song.length]
+            statement = 'INSERT INTO "Songs" '
+            statement += 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+            cur.execute(statement, insertion)
     conn.commit()
 
 def populate_tweets_table(artist):
@@ -374,7 +430,6 @@ def populate_tweets_table(artist):
         statement += 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
         cur.execute(statement, insertion)
     conn.commit()
-
 
 def bar_chart():
     pass
