@@ -1,0 +1,27 @@
+REQUIREMENTS TO RUN THIS PROJECT:
+
+Modules:
+sqlite3
+tweepy(twitter api handler)
+spotipy (spotify api handler)
+secrets
+json
+requests
+lyricwikia (lyric database)
+plotly.plotly as py
+plotly.graph_objs as go
+from spotipy.oauth2 import SpotifyClientCredentials
+from secrets import *
+from requests_oauthlib import OAuth1Session
+from aylienapiclient import textapi
+
+To Install:
+
+pip(3) install <module name> for all except:
+	ayien(sentiment analysis): pip(3) install --upgrade aylien-apiclient
+
+APIS:
+
+Twitter API-make an app, include key/secret in secrets file
+Spotify API-make an app, include key/secret in secrets file
+Ayien sentiment analysis-make an app, include key/secret in secrets file

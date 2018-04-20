@@ -4,7 +4,6 @@ import spotipy
 import secrets
 import json
 import requests
-import spotipy
 import lyricwikia
 import plotly.plotly as py
 import plotly.graph_objs as go
@@ -26,7 +25,6 @@ def make_request_using_cache(q):
     try:
         cache_file = open(ARTIST_CACHE, 'r')
         cache_contents = cache_file.read()
-        #print(cache_contents)
         CACHE_DICTION = json.loads(cache_contents)
         cache_file.close()
     except:
@@ -208,61 +206,6 @@ def artist_request(q):
                 songs += [t]
     return songs
 
-def spotify_request(q):
-    if ',' in q:
-        for artist in q.split(' , '):
-            r = make_request_using_cache(artist)
-            artist_id_dict = {}
-            for t in r['tracks']['items']:
-                l = t['album']['artists']
-                for x in l:
-                    artist_id_dict[x['name']] = x['id']
-            r = spotify.artist_albums(artist_id_dict[artist], album_type=None, country=None, limit=20, offset=0)
-            top = spotify.artist_top_tracks(artist_id_dict[artist], country = 'US')
-            top_dict = {}
-            for t in top['tracks']:
-                top_dict[t['name']] = t['popularity']
-            print(top_dict)
-            album_dict = {}
-            for a in r['items']:
-                album_dict[a['name']] = a['id']
-            track_dict = {}
-            for album_name, album_id in album_dict.items():
-                count = 0
-                tr = spotify.album_tracks(album_id, limit=50, offset=0)
-                song_list = []
-                for song in tr['items']:
-                    if song['name'] in top_dict.keys():
-                        song_list += [(song['name'], top_dict[song['name']])]
-                track_dict[album_name] = song_list
-                sort_songs = sorted(song_list, key = lambda x: x[1])
-                song_names = [song[0] for song in sort_songs]
-
-
-    else:
-        r = make_request_using_cache(q)
-        #print(r)
-        artist_id_dict = {}
-        for t in r['tracks']['items']:
-            l = t['album']['artists']
-            for x in l:
-                artist_id_dict[x['name']] = x['id']
-        r = spotify.artist_albums(artist_id_dict[q], album_type=None, country=None, limit=20, offset=0)
-        top = spotify.artist_top_tracks(artist_id_dict[q], country = 'US')
-        top_dict = {}
-        for t in top['tracks']:
-            top_dict[t['name']] = t['popularity']
-        album_dict = {}
-        for a in r['items']:
-            album_dict[a['name']] = a['id']
-        track_dict = {}
-        for album_name, album_id in album_dict.items():
-            tr = spotify.album_tracks(album_id, limit=50, offset=0)
-            song_list = []
-            for song in tr['items']:
-                song_list += [song['name']]
-            track_dict[album_name] = song_list
-
 def twitter_request(artist):
     query = artist
     count = '70'
@@ -425,7 +368,7 @@ def init_tweet_table(artist):
                 subjectivity = sentiment['subjectivity']
                 insertion = [None, tweet.createddate, tweet.screen_name, tweet.text, tweet.favorite_count, tweet.retweet_count, tweet.popularity_score, polarity, subjectivity]
                 statement = 'INSERT INTO "Tweets" '
-                statement += 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+                statement += 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, )'
                 cur.execute(statement, insertion)
             conn.commit()
         else:
@@ -525,7 +468,6 @@ def bar_chart(artist, item):
         negatives = []
         artist_list = []
         for v in artist_dict.items():
-            print(v)
             artist_list += [v[0]]
             positives += [v[1][0]]
             negatives += [v[1][1]]
@@ -646,7 +588,7 @@ def horizontal_bar(artist):
             negative_s = str(row[1])
         if row[0] == 'neutral':
             neutral_s = str(row[1])
-    x_values1 = [int(positive_s), int(negative_s), int(neutral_t)]
+    x_values1 = [int(positive_s), int(negative_s), int(neutral_s)]
     trace1 = go.Bar(
         y=y_values,
         x=x_values,
@@ -695,7 +637,7 @@ def process_command():
         if resp.lower() == 'exit':
             print("Goodbye!")
             break
-        if '=' in resp.lower():
+        if 'artist=' in resp:
             a = resp.split('=')
             if ',' in a[1]:
                 b = a[1].split(',')
@@ -724,12 +666,17 @@ def process_command():
                 init_tweet_table(a[1])
                 horizontal_bar(a[1])
                 continue
-        else:
-            artist_list = resp.split(', ')
+        if 'artists=' in resp:
+            a = resp.split('=')[1:]
+            ar = a[0]
+            artist_list = ar.split(', ')
             for artist in artist_list:
                 init_song_table(artist)
                 init_tweet_table(artist)
             bar_chart(artist_list, 'all')
+            continue
+        else:
+            print('Invalid input, please try again.')
             continue
 
 

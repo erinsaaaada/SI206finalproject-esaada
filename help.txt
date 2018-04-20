@@ -1,0 +1,24 @@
+Commands available: Enter the name of one artist (artist=artist name) followed by optional parameters described below, or a list of artists separated by commas.
+
+If one artist name is entered:
+IMPORTANT: If you want to enter an optional value, enter a comma after artist name eg. <artist=artist name, optional values>
+	Optional: <tweets> <polarity, subjectivity or subjectivity pie> | <songs> <polarity or popularity>
+		-tweets polarity: shows a pie chart of the number of tweets considered positive or negative for the artist
+		-tweets subjectivity: shows bar chart of number of objective versus subjective tweets
+		-tweets subjectivity pie: shows pie chart of subjective vs objective
+		-songs polarity: shows pie chart of positive versus negative songs
+		-songs popularity: shows bar chart of songs and popularity
+	
+	If no optional values are entered a horizontal bar graph will appear containing the number of positive and negative elements of the artist (tweets + songs)
+
+If a list of artists is entered a grouped bar graph will appear containing each artist in the list with their total positive and negative elements grouped side by side. 
+
+
+Sample inputs: 
+
+Single artist, tweets, polarity: <artist=artist name, tweets polarity>
+List of artists: <artists=artist1, artist2, artist3>
+
+Enter exit to exit, and help to see this list again. 
+
+
