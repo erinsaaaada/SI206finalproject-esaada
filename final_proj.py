@@ -4,14 +4,15 @@ import spotipy
 import secrets
 import json
 import requests
-import sys
 import spotipy
 import lyricwikia
-import plotly
+import plotly.plotly as py
+import plotly.graph_objs as go
 from spotipy.oauth2 import SpotifyClientCredentials
 from secrets import *
 from requests_oauthlib import OAuth1Session
 from aylienapiclient import textapi
+
 
 
 spotify_key = secrets.sp_client_key
@@ -326,8 +327,31 @@ def init_song_table(artist):
             'Length' INTEGER
             );"""
             cur.execute(statement1)
+            inst_list = []
+            for s in artist_request(artist):
+                if s['album']['album_type'] == 'single':
+                    inst_list += [Song(artist, s)]
+                else:
+                    inst_list += [Song(artist, s, False)]
+            for song in inst_list:
+                sentiment = lyric_sentiment(song.artist, song.name)
+                if type(sentiment) == dict:
+                    subjectivity = sentiment['subjectivity']
+                    polarity = sentiment['polarity']
+                    insertion = [None, song.artist, song.name, song.release_date, song.album_name, song.popularity, polarity, subjectivity, song.length]
+                    statement = 'INSERT INTO "Songs" '
+                    statement += 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+                    cur.execute(statement, insertion)
+                else:
+                    subjectivity = None
+                    polarity = None
+                    insertion = [None, song.artist, song.name, song.release_date, song.album_name, song.popularity, polarity, subjectivity, song.length]
+                    statement = 'INSERT INTO "Songs" '
+                    statement += 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+                    cur.execute(statement, insertion)
+            conn.commit()
         else:
-            None
+            return None
     except:
         statement1 = """CREATE TABLE 'Songs' (
         'Id' INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -341,7 +365,29 @@ def init_song_table(artist):
         'Length' INTEGER
         );"""
         cur.execute(statement1)
-    conn.commit()
+        inst_list = []
+        for s in artist_request(artist):
+            if s['album']['album_type'] == 'single':
+                inst_list += [Song(artist, s)]
+            else:
+                inst_list += [Song(artist, s, False)]
+        for song in inst_list:
+            sentiment = lyric_sentiment(song.artist, song.name)
+            if type(sentiment) == dict:
+                subjectivity = sentiment['subjectivity']
+                polarity = sentiment['polarity']
+                insertion = [None, song.artist, song.name, song.release_date, song.album_name, song.popularity, polarity, subjectivity, song.length]
+                statement = 'INSERT INTO "Songs" '
+                statement += 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+                cur.execute(statement, insertion)
+            else:
+                subjectivity = None
+                polarity = None
+                insertion = [None, song.artist, song.name, song.release_date, song.album_name, song.popularity, polarity, subjectivity, song.length]
+                statement = 'INSERT INTO "Songs" '
+                statement += 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+                cur.execute(statement, insertion)
+        conn.commit()
     conn.close()
 
 def init_tweet_table(artist):
@@ -373,8 +419,17 @@ def init_tweet_table(artist):
             'Subjectivity' TEXT
             );"""
             cur.execute(statement1)
+            for tweet in twitter_request(artist):
+                sentiment = tweet_sentiment(tweet)
+                polarity = sentiment['polarity']
+                subjectivity = sentiment['subjectivity']
+                insertion = [None, tweet.createddate, tweet.screen_name, tweet.text, tweet.favorite_count, tweet.retweet_count, tweet.popularity_score, polarity, subjectivity]
+                statement = 'INSERT INTO "Tweets" '
+                statement += 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+                cur.execute(statement, insertion)
+            conn.commit()
         else:
-            None
+            return None
     except:
         statement1 = """CREATE TABLE "Tweets" (
         'Id' INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -382,65 +437,301 @@ def init_tweet_table(artist):
         'Username' TEXT,
         'Tweet Text' TEXT,
         'Favorite Count' INTEGER,
-        'Retweets', INTEGER,
+        'Retweets' INTEGER,
         'Popularity' INTEGER,
         'Polarity' TEXT,
         'Subjectivity' TEXT
         );"""
         cur.execute(statement1)
-    conn.commit()
+        for tweet in twitter_request(artist):
+            sentiment = tweet_sentiment(tweet)
+            polarity = sentiment['polarity']
+            subjectivity = sentiment['subjectivity']
+            insertion = [None, tweet.createddate, tweet.screen_name, tweet.text, tweet.favorite_count, tweet.retweet_count, tweet.popularity_score, polarity, subjectivity]
+            statement = 'INSERT INTO "Tweets" '
+            statement += 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+            cur.execute(statement, insertion)
+        conn.commit()
     conn.close()
 
-def populate_song_table(artist):
-    conn = sqlite3.connect('{}.db'.format(artist))
-    cur = conn.cursor()
-    inst_list = []
-    for s in artist_request(artist):
-        if s['album']['album_type'] == 'single':
-            inst_list += [Song(artist, s)]
-        else:
-            inst_list += [Song(artist, s, False)]
-    for song in inst_list:
-        sentiment = lyric_sentiment(song.artist, song.name)
-        if type(sentiment) == dict:
-            subjectivity = sentiment['subjectivity']
-            polarity = sentiment['polarity']
-            insertion = [None, song.artist, song.name, song.release_date, song.album_name, song.popularity, subjectivity, polarity, song.length]
-            statement = 'INSERT INTO "Songs" '
-            statement += 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
-            cur.execute(statement, insertion)
-        else:
-            subjectivity = None
-            polarity = None
-            insertion = [None, song.artist, song.name, song.release_date, song.album_name, song.popularity, subjectivity, polarity, song.length]
-            statement = 'INSERT INTO "Songs" '
-            statement += 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
-            cur.execute(statement, insertion)
-    conn.commit()
+def bar_chart(artist, item):
+    try:
+        conn = sqlite3.connect('{}.db'.format(artist))
+        cur = conn.cursor()
+    except:
+        print("Connection error.")
+    if type(artist) == str:
+        if item == 'tweets':
+            statement = 'SELECT Subjectivity, SUM(Popularity) FROM Tweets GROUP BY Subjectivity '
+            st = cur.execute(statement)
+            x_values = ['objective', 'subjective']
+            for item in st:
+                if item[0] == 'objective':
+                    objectivity = item[1]
+                if item[0] == 'subjective':
+                    subjectivity = item[1]
+            y_values = [objectivity, subjectivity]
+            data = [go.Bar(
+                x=x_values,
+                y=y_values
+            )
+        ]
+            py.plot(data, filename='Tweet Subjectivity for {}'.format(artist))
+        if item == 'songs':
+            statement = 'SELECT Name, Popularity FROM Songs WHERE Popularity NOT NULL '
+            st = cur.execute(statement)
+            name_list = []
+            popularity_list = []
+            for r in st:
+                if r[0] not in name_list:
+                    name_list += [r[0]]
+                    popularity_list += [r[1]]
+            data = [go.Bar(
+                x=name_list,
+                y=popularity_list
+            )
+        ]
+            py.plot(data, filename='Song Popularity for {}'.format(artist))
+    if type(artist) == list:
+        artist_dict = {}
+        for a in artist:
+            try:
+                conn = sqlite3.connect('{}.db'.format(a))
+                cur = conn.cursor()
+            except:
+                print("Connection error.")
+            positive_count = 0
+            negative_count = 0
+            statement = '''SELECT Polarity, COUNT(Polarity) FROM Tweets
+                            WHERE Polarity = "positive" OR Polarity = "negative"
+                            GROUP BY Polarity '''
+            st = cur.execute(statement)
+            for row in st:
+                if row[0] == 'positive':
+                    positive_count += row[1]
+                if row[0] == 'negative':
+                    negative_count += row[1]
+            statement1 = '''SELECT Polarity, COUNT(Polarity) FROM Songs
+                            WHERE Polarity = "positive" OR Polarity = "negative"
+                            GROUP BY Polarity '''
+            st1 = cur.execute(statement1)
+            for row in st1:
+                if row[0] == 'positive':
+                    positive_count += row[1]
+                if row[0] == 'negative':
+                    negative_count += row[1]
+            artist_dict[a] = (positive_count, negative_count)
+        positives = []
+        negatives = []
+        artist_list = []
+        for v in artist_dict.items():
+            print(v)
+            artist_list += [v[0]]
+            positives += [v[1][0]]
+            negatives += [v[1][1]]
+        trace0 = go.Bar(
+        x=artist_list,
+        y=positives,
+        name='Positive',
+        marker=dict(
+            color='rgb(49,130,189)'
+        )
+        )
+        trace1 = go.Bar(
+        x=artist_list,
+        y=negatives,
+        name='Negative',
+        marker=dict(
+            color='rgb(204,204,204)',
+        )
+        )
 
-def populate_tweets_table(artist):
-    conn = sqlite3.connect('{}.db'.format(artist))
-    cur = conn.cursor()
-    for tweet in twitter_request(artist):
-        sentiment = tweet_sentiment(tweet)
-        polarity = sentiment['polarity']
-        subjectivity = sentiment['subjectivity']
-        insertion = [None, tweet.createddate, tweet.screen_name, tweet.text, tweet.favorite_count, tweet.retweet_count, tweet.popularity_score, polarity, subjectivity]
-        statement = 'INSERT INTO "Tweets" '
-        statement += 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
-        cur.execute(statement, insertion)
-    conn.commit()
+        data = [trace0, trace1]
+        layout = go.Layout(
+        xaxis=dict(tickangle=-45),
+        barmode='group',
+        )
 
-def bar_chart():
-    pass
+        fig = go.Figure(data=data, layout=layout)
+        py.plot(fig, filename='angled-text-bar')
 
-def pie_chart():
-    pass
+def pie_chart(artist, item, polarity):
+    try:
+        conn = sqlite3.connect('{}.db'.format(artist))
+        cur = conn.cursor()
+    except:
+        print("Connection error.")
+    if item == 'tweets':
+        if polarity == 'polarity':
+            statement = 'SELECT Polarity, COUNT(*) FROM Tweets GROUP BY Polarity '
+            st = cur.execute(statement)
+            label_list = []
+            value_list = []
+            for row in st:
+                label_list += [row[0]]
+                value_list += [row[1]]
+            colors = ['#FEBFB3', '#E1396C']
 
-def scatter_plot():
-    pass
+            trace = go.Pie(labels=label_list, values=value_list,
+                           hoverinfo='label+percent', textinfo='value',
+                           textfont=dict(size=20),
+                           marker=dict(colors=colors,
+                                      line=dict(color='#000000', width=2)))
+
+            py.plot([trace], filename='Tweet Polarity for {}'.format(artist))
+        if polarity == 'subjectivity':
+            statement = 'SELECT Subjectivity, COUNT(*) FROM Tweets WHERE Subjectivity NOT NULL GROUP BY Subjectivity '
+            st = cur.execute(statement)
+            label_list = []
+            value_list = []
+            for row in st:
+                label_list += [row[0]]
+                value_list += [row[1]]
+            colors = ['#FEBFB3', '#E1396C']
+
+            trace = go.Pie(labels=label_list, values=value_list,
+                           hoverinfo='label+percent', textinfo='value',
+                           textfont=dict(size=20),
+                           marker=dict(colors=colors,
+                                      line=dict(color='#000000', width=2)))
+
+            py.plot([trace], filename='Tweet Subjectivity for {}'.format(artist))
+    if item == 'songs':
+        statement = 'SELECT Polarity, COUNT(*) FROM Songs WHERE Polarity = "positive" OR Polarity = "negative" GROUP BY Polarity '
+        st = cur.execute(statement)
+        label_list = []
+        value_list = []
+        for row in st:
+            label_list += [row[0]]
+            value_list += [row[1]]
+        colors = ['#FEBFB3', '#E1396C']
+
+        trace = go.Pie(labels=label_list, values=value_list,
+                       hoverinfo='label+percent', textinfo='value',
+                       textfont=dict(size=20),
+                       marker=dict(colors=colors,
+                                  line=dict(color='#000000', width=2)))
+
+        py.plot([trace], filename='Song Polarity for {}'.format(artist))
+
+def horizontal_bar(artist):
+    try:
+        conn = sqlite3.connect('{}.db'.format(artist))
+        cur = conn.cursor()
+    except:
+        print("Connection error.")
+    statement = 'SELECT Polarity, COUNT(Polarity) FROM Tweets GROUP BY Polarity '
+    statement1 = 'SELECT Polarity, COUNT(Polarity) FROM Songs GROUP BY Polarity '
+    y_values = ['positive', 'negative', 'neutral']
+    st = cur.execute(statement)
+    positive_t = '0'
+    negative_t = '0'
+    neutral_t = '0'
+    for row in st:
+        if row[0] == 'positive':
+            positive_t = str(row[1])
+        if row[0] == 'negative':
+            negative_t = str(row[1])
+        if row[0] == 'neutral':
+            neutral_t = str(row[1])
+    x_values = [int(positive_t), int(negative_t), int(neutral_t)]
+    st1 = cur.execute(statement1)
+    positive_s = '0'
+    negative_s = '0'
+    neutral_s = '0'
+    for row in st1:
+        if row[0] == 'positive':
+            positive_s = str(row[1])
+        if row[0] == 'negative':
+            negative_s = str(row[1])
+        if row[0] == 'neutral':
+            neutral_s = str(row[1])
+    x_values1 = [int(positive_s), int(negative_s), int(neutral_t)]
+    trace1 = go.Bar(
+        y=y_values,
+        x=x_values,
+        name='Tweets',
+        orientation = 'h',
+        marker = dict(
+            color = 'rgba(246, 78, 139, 0.6)',
+            line = dict(
+                color = 'rgba(246, 78, 139, 1.0)',
+                width = 3)
+        )
+    )
+    trace2 = go.Bar(
+        y=y_values,
+        x=x_values1,
+        name='Songs',
+        orientation = 'h',
+        marker = dict(
+            color = 'rgba(58, 71, 80, 0.6)',
+            line = dict(
+                color = 'rgba(58, 71, 80, 1.0)',
+                width = 3)
+        )
+    )
+
+    data = [trace1, trace2]
+    layout = go.Layout(
+        barmode='stack'
+    )
+
+    fig = go.Figure(data=data, layout=layout)
+    py.plot(fig, filename='Polarity of Tweets versus Songs of {}'.format(artist))
+
+def load_help_text():
+    with open('help.txt') as f:
+        return f.read()
 
 def process_command():
-    pass
+    help_text = load_help_text()
+    resp = ' '
+    while resp != 'exit':
+        resp = input('Enter a command, or enter help for a list of options: ')
+        if resp.lower() == 'help':
+            print(help_text)
+            continue
+        if resp.lower() == 'exit':
+            print("Goodbye!")
+            break
+        if '=' in resp.lower():
+            a = resp.split('=')
+            if ',' in a[1]:
+                b = a[1].split(',')
+                init_tweet_table(b[0])
+                init_song_table(b[0])
+                if 'tweets' in b[1]:
+                    if 'polarity' in b[1]:
+                        pie_chart(b[0], 'tweets', 'polarity')
+                        continue
+                    if 'subjectivity' in b[1]:
+                        if 'subjectivity pie' in b[1]:
+                            pie_chart(b[0], 'tweets', 'polarity')
+                            continue
+                        else:
+                            bar_chart(b[0], 'tweets')
+                            continue
+                if 'songs' in b[1]:
+                    if 'polarity' in b[1]:
+                        pie_chart(b[0], 'songs', 'polarity')
+                        continue
+                    if 'popularity' in b[1]:
+                        bar_chart(b[0], 'songs')
+                        continue
+            else:
+                init_song_table(a[1])
+                init_tweet_table(a[1])
+                horizontal_bar(a[1])
+                continue
+        else:
+            artist_list = resp.split(', ')
+            for artist in artist_list:
+                init_song_table(artist)
+                init_tweet_table(artist)
+            bar_chart(artist_list, 'all')
+            continue
 
-#if __name__=="__main__":
+
+if __name__=="__main__":
+    process_command()
