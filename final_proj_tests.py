@@ -1,6 +1,6 @@
 import unittest
 from final_proj import *
-#these tests are based off of my cached data (as this is the data that was inputted into my databases)
+#these tests are based off of my cached data (as this is the data that was inputted into my databases), please use Bazzi.db and Khalid.db to run these tests-included in this repo
 class TestDatabase(unittest.TestCase):
     def test_tweet_table(self):
         conn = sqlite3.connect('Bazzi.db')
